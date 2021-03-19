@@ -1,2 +1,9 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 .env
-./src/interface_old.py
+src/interface_old.py
+paket.log
+data/
+
