@@ -55,6 +55,6 @@ print("some of the labels: ", labels)
 train, test, valid = preprocessing.run_preprocessing(input_params)
 
 # --------------------------------------------------------------------------------------
-#                                      model training  - old
+#                                      model training
 # --------------------------------------------------------------------------------------
 training.train(input_params, train, test, valid, class_cnt)

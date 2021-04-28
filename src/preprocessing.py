@@ -51,7 +51,7 @@ def run_preprocessing(input_params):
     """
     # todo: do the resize before splits
     train, test, valid = get_splits_from_file(input_params)
-    train = train.map(read_image).map(augment.resize).map(augment.random_crop).shuffle(buffer_size=1024).batch(64)
+    train = train.map(read_image).map(augment.resize).map(augment.normalize).map(augment.random_crop).shuffle(buffer_size=1024).batch(64)
     test = test.map(read_image).map(augment.resize).batch(64)
     valid = valid.map(read_image).map(augment.resize).batch(64)
     print("Preprocessing Done!")
