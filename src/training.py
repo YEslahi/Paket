@@ -7,6 +7,7 @@ from tensorflow.keras.losses import SparseCategoricalCrossentropy
 from tensorflow.keras.metrics import SparseCategoricalAccuracy
 import utility
 import datetime
+from sklearn.metrics import classification_report
 
 def train(input_params, train, test, valid, class_cnt):
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -17,7 +18,7 @@ def train(input_params, train, test, valid, class_cnt):
     test_log_dir = 'logs/gradient_tape/' + current_time + '/test'
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
     valid_summary_writer = tf.summary.create_file_writer(valid_log_dir)
-    test_summary_writer = tf.summary.create_file_writer(test_log_dir)
+    # test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # todo: create model with hyperparams with model_dir = '../data/models/params/current_time/'
     model_dir = '../data/models/model-' + current_time
@@ -25,12 +26,11 @@ def train(input_params, train, test, valid, class_cnt):
     optimizer = Adam(learning_rate=0.001)
     # Instantiate a loss function.
     loss_fn = SparseCategoricalCrossentropy(from_logits=True)
+    train_step = test_step = 0
 
     # Prepare the metrics.
     #todo use same variable for all the acc_metrics.
-    train_acc_metric = SparseCategoricalAccuracy('train_accuracy')
-    val_acc_metric = SparseCategoricalAccuracy('val_accuracy')
-    # test_acc_metric = SparseCategoricalAccuracy('test_accuracy')
+    acc_metric = SparseCategoricalAccuracy()
 
     if utility.dir_empty(model_dir):
         # model definition
@@ -51,10 +51,10 @@ def train(input_params, train, test, valid, class_cnt):
         ])
         model.summary()
 
-        epochs = 2
+        epochs = 200
         for epoch in range(epochs):
             print("\nStart of epoch %d" % (epoch,))
-            for step, (x_batch_train, y_batch_train) in enumerate(train):
+            for batch_idx, (x_batch_train, y_batch_train) in enumerate(train):
                 with tf.GradientTape() as tape:
                     # forward pass
                     logits = model(x_batch_train, training=True)
@@ -67,44 +67,46 @@ def train(input_params, train, test, valid, class_cnt):
                 optimizer.apply_gradients(zip(grads, model.trainable_weights))
 
                 # Update training metric.
-                train_acc_metric.update_state(y_batch_train, logits)
+                acc_metric.update_state(y_batch_train, logits)
 
-                if step % 10 == 0:
-                    print("training loss for one batch at step %d: %.4f" % (step, float(loss_value)))
+                with train_summary_writer.as_default():
+                    # import code; code.interact(local=dict(globals(), **locals()))
+                    #TODO: add the metrics for test too.
+                    #TODO: take the mean of the losses in every batch and then show,
+                    #TODO       loss_value is last loss of the batch(only 1).
+                            
+                    tf.summary.scalar('loss', loss_value, step=train_step)
+                    tf.summary.scalar('accuracy', acc_metric.result(), step=train_step)
+                    train_step += 1
+
+                if batch_idx % 10 == 0:
+                    print("training loss for one batch at step %d: %.4f" % (batch_idx, float(loss_value)))
             # Display metrics at the end of each epoch.
-            train_acc = train_acc_metric.result()
-            print("Training acc over epoch: %.4f" % (float(train_acc),))
-
-            # log on every epoch.
-            with train_summary_writer.as_default():
-                # import code; code.interact(local=dict(globals(), **locals()))
-                #TODO: add the metrics for test too.
-                #TODO: take the mean of the losses in every batch and then show,
-                #TODO       loss_value is last loss of the batch(only 1).
-
-                tf.summary.scalar('loss', loss_value, step=epoch)
-                tf.summary.scalar('accuracy', train_acc, step=epoch)
+            
+            print("Training acc over epoch: %.4f" % (float(acc_metric.result()),))
 
             # Reset training metrics at the end of each epoch
-            train_acc_metric.reset_states()
+            acc_metric.reset_states()
 
 
             # iterate on validation 
-            for x_batch_val, y_batch_val in valid:
+            for batch_idx, (x_batch_val, y_batch_val) in enumerate(valid):
                 # val_logits: y_pred of the validation. 
                 val_logits = model(x_batch_val, training=False)
                 loss = loss_fn(y_batch_val, val_logits)
                 # Update val metrics
-                val_acc_metric.update_state(y_batch_val, val_logits)
-            val_acc = val_acc_metric.result()
+                acc_metric.update_state(y_batch_val, val_logits)
 
-            with valid_summary_writer.as_default():
-                tf.summary.scalar('valid_loss', loss, step=epoch)
-                tf.summary.scalar('valid_acc', val_acc, step=epoch)
-
-            val_acc_metric.reset_states()
-            print("Validation acc: %.4f" % (float(val_acc),))
-            
+                with valid_summary_writer.as_default():
+                    tf.summary.scalar('loss', loss, step=test_step)
+                    tf.summary.scalar('accuracy', acc_metric.result(), step=test_step)
+                    test_step += 1
+                
+            print("Validation acc: %.4f" % (float(acc_metric.result()),))
+            # print(classification_report(y_batch_val, val_logits, target_names=labels))
+            acc_metric.reset_states()
+        
+        acc_metric.reset_states()
         model.save(model_dir + 'model')
         
     else:  # if model_dir is not empty
